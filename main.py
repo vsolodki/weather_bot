@@ -5,6 +5,7 @@ from telegram.ext import CommandHandler, CallbackContext, Application
 import logging
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from flask import Flask
 
 load_dotenv()
 
@@ -15,6 +16,13 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
 
 user_chats = {}
+
+# Initialize Flask app
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!", 200
 
 def get_weather(city='Prague'):
     url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
@@ -77,7 +85,8 @@ def main():
     scheduler.add_job(daily_weather_update, 'cron', hour=8, minute=0, args=[application])
     scheduler.start()
 
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Start the Flask app
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)), debug=False)
 
 if __name__ == '__main__':
     main()

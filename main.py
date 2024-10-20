@@ -1,10 +1,11 @@
 import os
 import requests
 from telegram import Update
-from telegram.ext import CommandHandler, CallbackContext, Application
+from telegram.ext import CommandHandler, CallbackContext, Application, ApplicationBuilder
 import logging
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 load_dotenv()
 
@@ -44,7 +45,7 @@ async def start(update: Update, context: CallbackContext):
     user = update.effective_user
     chat_id = update.message.chat_id
     user_chats[user.id] = chat_id
-    logger.info(f"Пользователь {user.first_name} начал взаимодействие с ботом.")
+    logger.info(f"User {user.first_name} started the bot.")
     
     await update.message.reply_text(f"Привет, {user.first_name}! Я твой бот для прогноза погоды. "
                                     "Ты можешь получать ежедневные уведомления о погоде.")
@@ -59,16 +60,22 @@ async def send_weather_update(chat_id, context: CallbackContext):
     message = get_weather()
     try:
         await context.bot.send_message(chat_id=chat_id, text=message)
-        logger.info(f"Сообщение с погодой отправлено пользователю с chat_id: {chat_id}.")
+        logger.info(f"Weather message sent to user with chat_id: {chat_id}.")
     except Exception as e:
-        logger.error(f"Ошибка при отправке сообщения: {e}")
+        logger.error(f"Error sending message: {e}")
 
 async def daily_weather_update(context: CallbackContext):
-    for user_id, chat_id in user_chats.items():
+    for chat_id in user_chats.items():
         await send_weather_update(chat_id, context)
 
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'Hello! The bot is running.')
+
 def main():
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("weather", weather))
@@ -77,7 +84,11 @@ def main():
     scheduler.add_job(daily_weather_update, 'cron', hour=8, minute=0, args=[application])
     scheduler.start()
 
+    server_address = ('0.0.0.0', int(os.getenv('PORT', '8080')))
+    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+    httpd.serve_forever()
 
 if __name__ == '__main__':
     main()
